@@ -76,6 +76,20 @@ class AlunoService{
         }
     }
 
+    async delete(id){
+        try{
+            return await prisma.aluno.delete({
+                where: {id: Number(id)}
+            });
+        }catch(e){
+            if(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025"){
+                throw new AlunoNaoEncontradoError();
+            }
+
+            throw e;
+        }
+    }
+
     async create(aluno){
         const {nome, email} = aluno;
         if(!nome || !email){
