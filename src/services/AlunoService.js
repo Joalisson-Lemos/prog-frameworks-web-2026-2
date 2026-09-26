@@ -1,6 +1,10 @@
+const { Prisma } = require("@prisma/client");
 const prisma = require("../databases/prisma");
 const AlunoInvalidoError = require("../errors/AlunoInvalidoError");
 const AlunoNaoEncontradoError = require("../errors/AlunoNaoEncontradoError");
+const EmailDuplicadoError = require("../errors/EmailDuplicadoError");
+const alunoSchema = require("../schemas/alunoSchema");
+const alunoAtualizacaoSchema = alunoSchema.partial();
 
 class AlunoService{
 
@@ -27,6 +31,49 @@ class AlunoService{
         }
 
         return aluno;
+    }
+
+    async update(id, aluno){
+        if(!aluno || typeof aluno !== "object" || Array.isArray(aluno)){
+            // O PUT é parcial, mas precisa receber ao menos um dos campos permitidos.
+            throw new AlunoInvalidoError("Informe ao menos um campo válido: nome ou email.");
+        }
+
+        const dadosAtualizacao = {};
+        if(Object.prototype.hasOwnProperty.call(aluno, "nome") && aluno.nome !== undefined){
+            dadosAtualizacao.nome = aluno.nome;
+        }
+        if(Object.prototype.hasOwnProperty.call(aluno, "email") && aluno.email !== undefined){
+            dadosAtualizacao.email = aluno.email;
+        }
+
+        if(Object.keys(dadosAtualizacao).length === 0){
+            throw new AlunoInvalidoError("Informe ao menos um campo válido: nome ou email.");
+        }
+
+        const validacao = alunoAtualizacaoSchema.safeParse(dadosAtualizacao);
+        if(!validacao.success){
+            throw new AlunoInvalidoError(validacao.error.issues[0].message);
+        }
+
+        try{
+            return await prisma.aluno.update({
+                where: {id: Number(id)},
+                data: validacao.data
+            });
+        }catch(e){
+            if(e instanceof Prisma.PrismaClientKnownRequestError){
+                if(e.code === "P2025"){
+                    throw new AlunoNaoEncontradoError();
+                }
+                if(e.code === "P2002"){
+                    // P2002 indica conflito com o campo único email; 409 representa esse conflito.
+                    throw new EmailDuplicadoError();
+                }
+            }
+
+            throw e;
+        }
     }
 
     async create(aluno){
